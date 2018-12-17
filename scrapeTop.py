@@ -5,152 +5,184 @@ import praw
 import requests
 import time
 
-# Initializes a connection w/ Reddit
-def initReddit():
-	# TODO secure this
-	clientId = "";
-	clientSecret = "";
-	userAgent = "";
 
-	reddit = praw.Reddit(client_id=clientId,
-			client_secret=clientSecret,
-			user_agent=userAgent)
-	return reddit
+def init_reddit():
+    """
+    Initializes a connection w/ Reddit
+    """
+    # ---------- TODO secure this ----------
+    client_id = ''
+    client_secret = ''
+    user_agent = ''
+    # ---------- TODO secure this ----------
 
-# Downloads top submissions
-# returns a string of downloaded / total
-#	ex: 7 downloaded, 10 total => 7/10
-def getTop(subreddit, time, count, parentPath):
-	if not initDirectory(subreddit, time, count, parentPath):
-		return "0/0"
+    reddit = praw.Reddit(client_id=client_id,
+                         client_secret=client_secret,
+                         user_agent=user_agent)
+    return reddit
 
-	totalNum = 0
-	numDownloaded = 0
 
-	for submission in reddit.subreddit(subreddit).top(time, limit=count):
-		success = False
+def get_top(subreddit, time, count, parent_path):
+    """
+    Downloads top submissions
 
-		print("{} {}".format(totalNum, submission.title))
-		success = downloadSubmission(submission)
-		print("\t" + submission.url)
-		print("\t" + success.__str__())
+    returns a string of downloaded / total
+    ex: 7 downloaded, 10 total => 7/10
+    """
+    if not init_directory(subreddit, time, count, parent_path):
+        return '0/0'
 
-		totalNum += 1
-		if success:
-			numDownloaded += 1
+    total_num = 0
+    num_downloaded = 0
 
-	return str(numDownloaded) + "/" + str(totalNum)
+    for submission in reddit.subreddit(subreddit).top(time, limit=count):
+        success = False
 
-# Returns False if directory already present
-def initDirectory(subreddit, time, count, parentPath):
-	dirName = "{}_{}_{}_{}".format(
-		subreddit, time, count, date.today())
-	pwd = parentPath + dirName
+        print('{} {}'.format(total_num, submission.title))
+        success = download_submission(submission)
+        print('\t' + submission.url)
+        print('\t' + success.__str__())
 
-	if os.path.exists(pwd):
-		return False
+        total_num += 1
+        if success:
+            num_downloaded += 1
 
-	os.makedirs(pwd)
-	os.chdir(pwd)
-	return True
+    return str(num_downloaded) + '/' + str(total_num)
 
-# returns True if submission downloaded
-def downloadSubmission(submission):
-	success = False
-	if ".jpg" in submission.url or ".png" in submission.url:
-		success = getDirect(submission.url, submission.id)
-	elif ".gifv" in submission.url:
-		cleanedUrl = gifvToMp4(submission.url)
-		success = getDirect(cleanedUrl, submission.id)
-	elif "v.redd.it" in submission.url:
-		vreddit_getDirect(submission.url, submission.id)
-	elif "imgur.com/a/" in submission.url:
-		originalPath = os.getcwd()
-		albumDir = originalPath + "/" + submission.id
-		os.makedirs(albumDir)
-		os.chdir(albumDir)
 
-		success = imgur_getAlbum(submission.url, submission.id)	
+def init_directory(subreddit, time, count, parent_path):
+    """
+    Returns False if directory already present
+    """
+    dir_name = '{}_{}_{}_{}'.format(subreddit, time, count, date.today())
+    pwd = parent_path + dir_name
 
-		os.chdir(originalPath)
+    if os.path.exists(pwd):
+        return False
 
-	elif "imgur" in submission.url:
-		success = getDirect(submission.url + ".jpg", submission.id)
-	elif "gfycat" in submission.url:
-		cleanedUrl = gyfcatToMp4(submission.url)
-		success = getDirect(cleanedUrl, submission.id)
-	return success
+    os.makedirs(pwd)
+    os.chdir(pwd)
+    return True
 
-# Downloads content from vreddit urls
-# 	TODO properly test this with videos and files
-def vreddit_getDirect(submissionUrl, submissionId):
-	htmlSource = requests.get(submissionUrl).text
-	soup = BeautifulSoup(htmlSource, "html.parser")
-	vidId = "video-" + submissionId
 
-	# Retries until id is found
-	imageUrl = soup.find(id=vidId)
-	while imageUrl.__str__() == "None":
-		time.sleep(2)
-		htmlSource = requests.get(submissionUrl).text
-		soup = BeautifulSoup(htmlSource, "html.parser")
-		vidId = "video-" + submissionId;
-		imageUrl = soup.find(id=vidId)
-	imageUrl = imageUrl['data-seek-preview-url']
-	print("\t " + imageUrl)
-	time.sleep(2)
+def download_submission(submission):
+    """
+    Returns True if submission downloaded
+    """
+    success = False
+    if '.jpg' in submission.url or '.png' in submission.url:
+        success = get_direct(submission.url, submission.id)
+    elif '.gifv' in submission.url:
+        cleaned_url = gifv_to_mp4(submission.url)
+        success = get_direct(cleaned_url, submission.id)
+    elif 'v.redd.it' in submission.url:
+        vreddit_get_direct(submission.url, submission.id)
+    elif 'imgur.com/a/' in submission.url:
+        original_path = os.getcwd()
+        album_dir = original_path + '/' + submission.id
+        os.makedirs(album_dir)
+        os.chdir(album_dir)
 
-# TODO boolean handling
-def imgur_getAlbum(submissionUrl, submissionId):
-	htmlSource = requests.get(submissionUrl).text
-	soup = BeautifulSoup(htmlSource, "html.parser")
-	imageUrl = soup.select('[src*="i.imgur.com"]')
+        success = imgur_get_album(submission.url, submission.id)
 
-	success = True
-	numInAlbum = 0
-	#print(imageUrl)
-	for img in imageUrl:
-		fileName = submissionId + "-" + str(numInAlbum).zfill(2)
-		success = success and getDirect("http:" + img['src'], fileName)
-		numInAlbum += 1
-	
-	return success
+        os.chdir(original_path)
 
-# Returns true if request is valid
-def getDirect(imageUrl, submissionId):
-	print("getting " + imageUrl)
-	response = requests.get(imageUrl)
-	if (response.status_code == 200):
-		fileName = submissionId + getFileExt(imageUrl)
-		download(response, fileName)
-		return True
-	return False
+    elif 'imgur' in submission.url:
+        success = get_direct(submission.url + '.jpg', submission.id)
+    elif 'gfycat' in submission.url:
+        cleaned_url = gyfcat_to_mp4(submission.url)
+        success = get_direct(cleaned_url, submission.id)
+    return success
 
-def download(response, fileName):
-	with open(fileName, 'wb') as fo:
-		fo.write(response.content)
 
-# Changes ".gifv" ending urls to ".mp4"
-def gifvToMp4(url):
-	newUrl = url[:url.rfind('.')] + ".mp4"
-	return newUrl
+def vreddit_get_direct(submission_url, submission_id):
+    """
+    Downloads content from vreddit urls
 
-# Changes gyfcat urls to direct .mp4 links
-def gyfcatToMp4(url):
-	left = url[:url.find('g')]
-	middle = url[url.find('g'):]
-	newUrl = left + "giant." + middle + ".mp4"
-	print(newUrl)
-	return newUrl
+    TODO properly test this with videos and files
+    """
+    html_source = requests.get(submission_url).text
+    soup = BeautifulSoup(html_source, 'html.parser')
+    vid_id = 'video-' + submission_id
 
-# Returns the file extension of direct urls
-def getFileExt(imageUrl):
-	return imageUrl[imageUrl.rfind('.'):]
+    # Retries until id is found
+    image_url = soup.find(id=vid_id)
+    while image_url.__str__() == 'None':
+        time.sleep(2)
+        html_source = requests.get(submission_url).text
+        soup = BeautifulSoup(html_source, 'html.parser')
+        vid_id = 'video-' + submission_id;
+        image_url = soup.find(id=vid_id)
+    image_url = image_url['data-seek-preview-url']
+    print('\t ' + image_url)
+    time.sleep(2)
+
+
+def imgur_get_album(submission_url, submission_id):
+    # TODO boolean handling
+    html_source = requests.get(submission_url).text
+    soup = BeautifulSoup(html_source, 'html.parser')
+    image_url = soup.select('[src*="i.imgur.com"]')
+
+    success = True
+    num_in_album = 0
+    # print(image_url)
+    for img in image_url:
+        file_name = submission_id + '-' + str(num_in_album).zfill(2)
+        success = success and get_direct('http:' + img['src'], file_name)
+        num_in_album += 1
+
+    return success
+
+
+def get_direct(image_url, submission_id):
+    """
+    Returns true if request is valid
+    """
+    print('getting ' + image_url)
+    response = requests.get(image_url)
+    if response.status_code == 200:
+        file_name = submission_id + get_file_ext(image_url)
+        download(response, file_name)
+        return True
+    return False
+
+
+def download(response, file_name):
+    with open(file_name, 'wb') as fo:
+        fo.write(response.content)
+
+
+def gifv_to_mp4(url):
+    """
+    Changes ".gifv" ending urls to ".mp4"
+    """
+    newUrl = url[:url.rfind('.')] + '.mp4'
+    return newUrl
+
+
+def gyfcat_to_mp4(url):
+    """
+    Changes gyfcat urls to direct .mp4 links
+    """
+    left = url[:url.find('g')]
+    middle = url[url.find('g'):]
+    new_url = left + 'giant.' + middle + '.mp4'
+    print(new_url)
+    return new_url
+
+
+def get_file_ext(image_url):
+    """
+    Returns the file extension of direct urls
+    """
+    return image_url[image_url.rfind('.'):]
+
 
 # ---------- Main ----------
-reddit = initReddit()
-#downloadedFraction = getTop("aww", "week", 10, "./")
+if __name__ == '__main__':
+    reddit = init_reddit()
+    downloadedFraction = get_top('aww', 'week', 10, './')
 
-print("-" * 40)
-print(downloadedFraction + " downloaded\n")
-
+    print('-' * 40)
+    print(downloadedFraction + ' downloaded\n')
